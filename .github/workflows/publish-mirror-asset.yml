@@ -1,0 +1,49 @@
+name: Publish mirrored file as a release asset
+
+# Added 2026-09-15: uploading a release asset requires uploads.github.com,
+# which isn't reachable from the sandbox that otherwise maintains this
+# repo - but a GitHub-hosted runner has full internet access, so this lets
+# that happen anyway. Trigger manually (workflow_dispatch) with the tag
+# and the path (relative to repo root) of an already-committed file to
+# attach - e.g. tag "tightvnc-2.8.88", path "mirrors/tightvnc-2.8.88-gpl-setup-64bit.msi".
+#
+# Why a real Release asset instead of just serving the raw committed file
+# via raw.githubusercontent.com: Netfree's filter blocked the raw URL
+# outright ("file type not supported by automatic filtering" - .msi
+# content it can't scan) while regular release-asset downloads for this
+# same app already work through Netfree today. Matching that exact URL
+# pattern (github.com/.../releases/download/...) is the point.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to attach the asset to'
+        required: true
+      file_path:
+        description: 'Path (relative to repo root) of the already-committed file to attach'
+        required: true
+      asset_name:
+        description: 'Filename to give the asset (defaults to the source filename)'
+        required: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload file as a release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          NAME="${{ inputs.asset_name }}"
+          if [ -z "$NAME" ]; then
+            NAME="$(basename "${{ inputs.file_path }}")"
+          fi
+          gh release upload "${{ inputs.tag }}" "${{ inputs.file_path }}#$NAME" \
+            --repo "${{ github.repository }}" \
+            --clobber
+          echo "Uploaded ${{ inputs.file_path }} as $NAME to release ${{ inputs.tag }}"
